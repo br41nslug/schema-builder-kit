@@ -1,4 +1,4 @@
-import axios from "axios";
+import axios, { AxiosInstance } from "axios";
 
 import { Collection } from "./collection";
 import { Relation } from "./relation";
@@ -6,10 +6,25 @@ import { Relation } from "./relation";
 export class Builder {
   collections: Collection[];
   relations: Relation[];
+  directus: AxiosInstance | undefined;
+
 
   constructor() {
     this.collections = [];
     this.relations = [];
+  }
+
+  async login(baseURL: string, email: string, password: string) {
+    this.directus = axios.create({ baseURL });
+
+    const { access_token } = await this.directus.post("/auth/login", { email, password }).then(({ data: { data } }) => data);
+
+    this.directus.defaults.headers.common = {
+      Authorization: `Bearer ${access_token}`
+    };
+  }
+  hookApi(directus: AxiosInstance) {
+    this.directus = directus;
   }
 
   collection(name: string) {
@@ -39,19 +54,13 @@ export class Builder {
     };
   }
 
-  async fetch(baseURL: string, email: string, password: string) {
-    const directus = axios.create({ baseURL });
-
-    const { access_token } = await directus.post("/auth/login", { email, password }).then(({ data: { data } }) => data);
-
-    directus.defaults.headers.common = {
-      Authorization: `Bearer ${access_token}`
-    };
-
+  async fetch() {
+    if (!this.directus) return console.error('Directus library has not been initialized. Call `log()` or `hookApi()` first');
     const { collections, relations } = this.render();
 
     const then = ({ data: { data } }: { data: any }) => data;
     const error = ({ response: { data } }: { response: any }) => data;
+    const directus = this.directus;
 
     const result = {
       collections: await directus.post("collections", collections).then(then).catch(error),
